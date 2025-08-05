@@ -1,0 +1,21 @@
+{
+  "name": "google-docs-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot that browses Google Drive and displays Google Docs as markdown",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js"
+  },
+  "keywords": ["discord", "bot", "google-drive", "google-docs", "markdown"],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "googleapis": "^128.0.0",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
