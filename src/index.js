@@ -111,7 +111,7 @@ function createNavigationButtons(files, currentFolderId) {
     let buttonCount = 0;
     
     // Add back button if not at root
-    if (currentFolderId !== process.env.ROOT_FOLDER_ID) {
+    if (currentFolderId !== process.env.GOOGLE_DRIVE_FOLDER_ID) {
         currentRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('back')
@@ -185,7 +185,7 @@ client.on('interactionCreate', async interaction => {
             const subcommand = interaction.options.getSubcommand();
             
             if (subcommand === 'browse') {
-                await handleBrowse(interaction, process.env.ROOT_FOLDER_ID);
+                await handleBrowse(interaction, process.env.GOOGLE_DRIVE_FOLDER_ID);
             } else if (subcommand === 'search') {
                 const query = interaction.options.getString('query');
                 await handleSearch(interaction, query);
@@ -213,7 +213,7 @@ async function handleBrowse(interaction, folderId) {
         userHistory.set(userId, []);
     }
     
-    if (folderId !== process.env.ROOT_FOLDER_ID) {
+    if (folderId !== process.env.GOOGLE_DRIVE_FOLDER_ID) {
         userHistory.get(userId).push(folderId);
     }
     
@@ -271,13 +271,13 @@ async function handleBack(interaction) {
     const history = userHistory.get(userId);
     
     if (!history || history.length === 0) {
-        await handleBrowse(interaction, process.env.ROOT_FOLDER_ID);
+        await handleBrowse(interaction, process.env.GOOGLE_DRIVE_FOLDER_ID);
         return;
     }
     
     // Remove current folder and go to previous
     history.pop();
-    const previousFolder = history.length > 0 ? history[history.length - 1] : process.env.ROOT_FOLDER_ID;
+    const previousFolder = history.length > 0 ? history[history.length - 1] : process.env.GOOGLE_DRIVE_FOLDER_ID;
     
     await handleBrowse(interaction, previousFolder);
 }
