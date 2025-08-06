@@ -148,25 +148,44 @@ function createNavigationButtons(files, currentFolderId) {
 
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
-    
-    // Register slash commands
-    const browseCommand = new SlashCommandBuilder()
-        .setName('browse')
-        .setDescription('Browse Google Drive folders');
 
-    const searchCommand = new SlashCommandBuilder()
-        .setName('search')
-        .setDescription('Search for documents')
-        .addStringOption(option =>
-            option.setName('query')
-                .setDescription('Search term')
-                .setRequired(true)
+    // Test Google Drive connection
+    try {
+        console.log('Testing Google Drive connection...');
+        const testResponse = await drive.files.list({
+            q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed=false`,
+            fields: 'files(id, name)',
+            pageSize: 1
+        });
+        console.log('Google Drive connection successful!');
+        console.log(`Root folder ID: ${process.env.GOOGLE_DRIVE_FOLDER_ID}`);
+    } catch (error) {
+        console.error('Google Drive connection failed:', error);
+    }
+    
+    // Register slash command
+    const command = new SlashCommandBuilder()
+        .setName('docs')
+        .setDescription('Browse Google Drive and view documents')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('browse')
+                .setDescription('Browse Google Drive folders')
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('search')
+                .setDescription('Search for documents')
+                .addStringOption(option =>
+                    option.setName('query')
+                        .setDescription('Search term')
+                        .setRequired(true)
+                )
         );
 
     try {
-        await client.application.commands.create(browseCommand);
-        await client.application.commands.create(searchCommand);
-        console.log('Slash commands registered successfully!');
+        await client.application.commands.create(command);
+        console.log('Slash command registered successfully!');
     } catch (error) {
         console.error('Error registering slash command:', error);
     }
@@ -176,11 +195,15 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand()) {
         const { commandName } = interaction;
 
-        if (commandName === 'browse') {
-            await handleBrowse(interaction, process.env.GOOGLE_DRIVE_FOLDER_ID);
-        } else if (commandName === 'search') {
-            const query = interaction.options.getString('query');
-            await handleSearch(interaction, query);
+        if (commandName === 'docs') {
+            const subcommand = interaction.options.getSubcommand();
+
+            if (subcommand === 'browse') {
+                await handleBrowse(interaction, process.env.GOOGLE_DRIVE_FOLDER_ID);
+            } else if (subcommand === 'search') {
+                const query = interaction.options.getString('query');
+                await handleSearch(interaction, query);
+            }
         }
     } else if (interaction.isButton()) {
         const [type, id] = interaction.customId.split(':');
@@ -196,36 +219,45 @@ client.on('interactionCreate', async interaction => {
 });
 
 async function handleBrowse(interaction, folderId) {
-    await interaction.deferReply();
-    
-    // Update user history
-    const userId = interaction.user.id;
-    if (!userHistory.has(userId)) {
-        userHistory.set(userId, []);
+    try {
+        await interaction.deferReply();
+        console.log(`Browsing folder: ${folderId}`);
+
+        // Update user history
+        const userId = interaction.user.id;
+        if (!userHistory.has(userId)) {
+            userHistory.set(userId, []);
+        }
+
+        if (folderId !== process.env.GOOGLE_DRIVE_FOLDER_ID) {
+            userHistory.get(userId).push(folderId);
+        }
+
+        console.log('Fetching folder contents...');
+        const files = await getFolderContents(folderId);
+        console.log(`Found ${files.length} files`);
+
+        if (files.length === 0) {
+            await interaction.editReply('This folder is empty or you don\'t have access to it.');
+            return;
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle('📁 Google Drive Browser')
+            .setDescription('Click a folder to browse or a document to view')
+            .setColor(0x4285f4);
+
+        const buttons = createNavigationButtons(files, folderId);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: buttons
+        });
+        console.log('Browse response sent successfully');
+    } catch (error) {
+        console.error('Error in handleBrowse:', error);
+        await interaction.editReply('Error: Could not browse folder. Please check the logs.');
     }
-    
-    if (folderId !== process.env.GOOGLE_DRIVE_FOLDER_ID) {
-        userHistory.get(userId).push(folderId);
-    }
-    
-    const files = await getFolderContents(folderId);
-    
-    if (files.length === 0) {
-        await interaction.editReply('This folder is empty or you don\'t have access to it.');
-        return;
-    }
-    
-    const embed = new EmbedBuilder()
-        .setTitle('📁 Google Drive Browser')
-        .setDescription('Click a folder to browse or a document to view')
-        .setColor(0x4285f4);
-    
-    const buttons = createNavigationButtons(files, folderId);
-    
-    await interaction.editReply({
-        embeds: [embed],
-        components: buttons
-    });
 }
 
 async function handleDocument(interaction, docId) {
