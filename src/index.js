@@ -163,6 +163,67 @@ function createBrowseEmbed(files, currentFolderId) {
     return embed;
 }
 
+// Create browse embed with clickable links (no buttons needed)
+function createBrowseEmbedWithLinks(files, currentFolderId, userId) {
+    const embed = new EmbedBuilder()
+        .setTitle('📁 Google Drive Browser')
+        .setColor(0x4285f4);
+
+    // Separate folders and documents
+    const folders = files.filter(file => file.mimeType === 'application/vnd.google-apps.folder');
+    const documents = files.filter(file => file.mimeType === 'application/vnd.google-apps.document');
+
+    let description = '';
+
+    // Add navigation info
+    if (currentFolderId !== process.env.GOOGLE_DRIVE_FOLDER_ID) {
+        description += '⬅️ **[← Back to Parent Folder](https://discord.com/channels/@me)**\n\n';
+    }
+
+    // Add folders section with clickable links
+    if (folders.length > 0) {
+        description += '📁 **Folders:**\n';
+        folders.slice(0, 10).forEach((folder, index) => {
+            const truncatedName = folder.name.length > 45 ? folder.name.substring(0, 42) + '...' : folder.name;
+            // Create a custom link that will trigger folder browsing
+            description += `${index + 1}. 📂 [${truncatedName}](https://drive.google.com/drive/folders/${folder.id})\n`;
+        });
+        description += '\n';
+    }
+
+    // Add documents section with direct Google Docs links
+    if (documents.length > 0) {
+        description += '📄 **Documents:**\n';
+        documents.slice(0, 10).forEach((doc, index) => {
+            const truncatedName = doc.name.length > 45 ? doc.name.substring(0, 42) + '...' : doc.name;
+            // Direct link to Google Docs
+            description += `${index + 1}. 📝 [${truncatedName}](https://docs.google.com/document/d/${doc.id}/edit)\n`;
+        });
+    }
+
+    if (folders.length === 0 && documents.length === 0) {
+        description = '📭 This folder is empty.';
+    }
+
+    // Add footer info
+    const totalItems = folders.length + documents.length;
+    if (totalItems > 20) {
+        description += `\n*Showing first 20 of ${totalItems} items*`;
+    }
+
+    embed.setDescription(description);
+
+    // Add fields for better organization
+    if (folders.length > 0 || documents.length > 0) {
+        embed.addFields(
+            { name: '📊 Summary', value: `${folders.length} folders • ${documents.length} documents`, inline: true },
+            { name: '💡 How to use', value: 'Click the links above to open in Google Drive/Docs', inline: true }
+        );
+    }
+
+    return embed;
+}
+
 // Create search results embed
 function createSearchEmbed(files, query) {
     const embed = new EmbedBuilder()
@@ -193,6 +254,43 @@ function createSearchEmbed(files, query) {
         embed.addFields(
             { name: '📊 Results', value: `${documents.length} documents found`, inline: true },
             { name: '💡 How to use', value: 'Click the numbered buttons below to view documents', inline: true }
+        );
+    }
+
+    return embed;
+}
+
+// Create search results embed with clickable links
+function createSearchEmbedWithLinks(files, query) {
+    const embed = new EmbedBuilder()
+        .setTitle(`🔍 Search Results for "${query}"`)
+        .setColor(0xfbbc04);
+
+    const documents = files.filter(file => file.mimeType === 'application/vnd.google-apps.document');
+
+    let description = '';
+
+    if (documents.length > 0) {
+        description += '📄 **Found Documents:**\n';
+        documents.slice(0, 15).forEach((doc, index) => {
+            const truncatedName = doc.name.length > 45 ? doc.name.substring(0, 42) + '...' : doc.name;
+            // Direct link to Google Docs
+            description += `${index + 1}. 📝 [${truncatedName}](https://docs.google.com/document/d/${doc.id}/edit)\n`;
+        });
+
+        if (documents.length > 15) {
+            description += `\n*Showing first 15 of ${documents.length} results*`;
+        }
+    } else {
+        description = `📭 No documents found matching "${query}"`;
+    }
+
+    embed.setDescription(description);
+
+    if (documents.length > 0) {
+        embed.addFields(
+            { name: '📊 Results', value: `${documents.length} documents found`, inline: true },
+            { name: '💡 How to use', value: 'Click the links above to open documents', inline: true }
         );
     }
 
@@ -270,16 +368,26 @@ client.once('ready', async () => {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('browse')
-                .setDescription('Browse Google Drive folders')
+                .setDescription('Browse Google Drive folders (private)')
+                .addBooleanOption(option =>
+                    option.setName('share')
+                        .setDescription('Share with everyone in the channel (default: private)')
+                        .setRequired(false)
+                )
         )
         .addSubcommand(subcommand =>
             subcommand
                 .setName('search')
-                .setDescription('Search for documents')
+                .setDescription('Search for documents (private)')
                 .addStringOption(option =>
                     option.setName('query')
                         .setDescription('Search term')
                         .setRequired(true)
+                )
+                .addBooleanOption(option =>
+                    option.setName('share')
+                        .setDescription('Share with everyone in the channel (default: private)')
+                        .setRequired(false)
                 )
         );
 
@@ -297,19 +405,20 @@ client.on('interactionCreate', async interaction => {
 
         if (commandName === 'docs') {
             const subcommand = interaction.options.getSubcommand();
+            const share = interaction.options.getBoolean('share') || false;
 
             if (subcommand === 'browse') {
-                await handleBrowse(interaction, process.env.GOOGLE_DRIVE_FOLDER_ID);
+                await handleBrowse(interaction, process.env.GOOGLE_DRIVE_FOLDER_ID, share);
             } else if (subcommand === 'search') {
                 const query = interaction.options.getString('query');
-                await handleSearch(interaction, query);
+                await handleSearch(interaction, query, share);
             }
         }
     } else if (interaction.isButton()) {
         const [type, id] = interaction.customId.split(':');
 
         if (type === 'folder') {
-            await handleBrowse(interaction, id);
+            await handleBrowse(interaction, id, false);
         } else if (type === 'doc') {
             await handleDocument(interaction, id);
         } else if (type === 'back') {
@@ -322,10 +431,10 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-async function handleBrowse(interaction, folderId) {
+async function handleBrowse(interaction, folderId, share = false) {
     try {
-        await interaction.deferReply();
-        console.log(`Browsing folder: ${folderId}`);
+        await interaction.deferReply({ ephemeral: !share });
+        console.log(`Browsing folder: ${folderId}, shared: ${share}`);
 
         // Update user history
         const userId = interaction.user.id;
@@ -346,12 +455,10 @@ async function handleBrowse(interaction, folderId) {
             return;
         }
 
-        const embed = createBrowseEmbed(files, folderId);
-        const buttons = createNavigationButtons(files, folderId);
+        const embed = createBrowseEmbedWithLinks(files, folderId, userId);
 
         await interaction.editReply({
-            embeds: [embed],
-            components: buttons
+            embeds: [embed]
         });
         console.log('Browse response sent successfully');
     } catch (error) {
@@ -411,15 +518,15 @@ async function handleBack(interaction) {
     const history = userHistory.get(userId);
     
     if (!history || history.length === 0) {
-        await handleBrowse(interaction, process.env.GOOGLE_DRIVE_FOLDER_ID);
+        await handleBrowse(interaction, process.env.GOOGLE_DRIVE_FOLDER_ID, false);
         return;
     }
-    
+
     // Remove current folder and go to previous
     history.pop();
     const previousFolder = history.length > 0 ? history[history.length - 1] : process.env.GOOGLE_DRIVE_FOLDER_ID;
-    
-    await handleBrowse(interaction, previousFolder);
+
+    await handleBrowse(interaction, previousFolder, false);
 }
 
 async function handlePdfDownload(interaction, docId) {
@@ -476,29 +583,27 @@ async function handlePreview(interaction, docId) {
     }
 }
 
-async function handleSearch(interaction, query) {
-    await interaction.deferReply();
-    
+async function handleSearch(interaction, query, share = false) {
+    await interaction.deferReply({ ephemeral: !share });
+
     try {
         const response = await drive.files.list({
             q: `name contains '${query}' and mimeType='application/vnd.google-apps.document' and trashed=false`,
             fields: 'files(id, name)',
             orderBy: 'name'
         });
-        
+
         const files = response.data.files;
-        
+
         if (files.length === 0) {
             await interaction.editReply(`No documents found matching "${query}".`);
             return;
         }
-        
-        const embed = createSearchEmbed(files, query);
-        const buttons = createNavigationButtons(files, null);
-        
+
+        const embed = createSearchEmbedWithLinks(files, query);
+
         await interaction.editReply({
-            embeds: [embed],
-            components: buttons
+            embeds: [embed]
         });
     } catch (error) {
         console.error('Error searching:', error);
