@@ -173,42 +173,49 @@ function createBrowseEmbedWithLinks(files, currentFolderId, userId) {
     const folders = files.filter(file => file.mimeType === 'application/vnd.google-apps.folder');
     const documents = files.filter(file => file.mimeType === 'application/vnd.google-apps.document');
 
+    // Build description with proper length limits
     let description = '';
+    const maxDescriptionLength = 2000; // Discord limit is 4096, but we want to be safe
 
     // Add navigation info
     if (currentFolderId !== process.env.GOOGLE_DRIVE_FOLDER_ID) {
-        description += '⬅️ **[← Back to Parent Folder](https://discord.com/channels/@me)**\n\n';
+        description += '⬅️ **Use buttons below to navigate back**\n\n';
     }
 
     // Add folders section with clickable links
     if (folders.length > 0) {
         description += '📁 **Folders:**\n';
-        folders.slice(0, 6).forEach((folder, index) => {
-            const truncatedName = folder.name.length > 40 ? folder.name.substring(0, 37) + '...' : folder.name;
-            // Create a custom link that will trigger folder browsing
+        const foldersToShow = folders.slice(0, 5);
+        foldersToShow.forEach((folder, index) => {
+            const truncatedName = folder.name.length > 35 ? folder.name.substring(0, 32) + '...' : folder.name;
             description += `${index + 1}. 📂 [${truncatedName}](https://drive.google.com/drive/folders/${folder.id})\n`;
         });
+        if (folders.length > 5) {
+            description += `*...and ${folders.length - 5} more folders*\n`;
+        }
         description += '\n';
     }
 
     // Add documents section with direct Google Docs links
     if (documents.length > 0) {
         description += '📄 **Documents:**\n';
-        documents.slice(0, 8).forEach((doc, index) => {
-            const truncatedName = doc.name.length > 40 ? doc.name.substring(0, 37) + '...' : doc.name;
-            // Direct link to Google Docs
+        const documentsToShow = documents.slice(0, 6);
+        documentsToShow.forEach((doc, index) => {
+            const truncatedName = doc.name.length > 35 ? doc.name.substring(0, 32) + '...' : doc.name;
             description += `${index + 1}. 📝 [${truncatedName}](https://docs.google.com/document/d/${doc.id}/edit)\n`;
         });
+        if (documents.length > 6) {
+            description += `*...and ${documents.length - 6} more documents*\n`;
+        }
     }
 
     if (folders.length === 0 && documents.length === 0) {
         description = '📭 This folder is empty.';
     }
 
-    // Add footer info
-    const totalItems = folders.length + documents.length;
-    if (totalItems > 20) {
-        description += `\n*Showing first 20 of ${totalItems} items*`;
+    // Ensure description doesn't exceed Discord limits
+    if (description.length > maxDescriptionLength) {
+        description = description.substring(0, maxDescriptionLength - 3) + '...';
     }
 
     embed.setDescription(description);
@@ -217,8 +224,19 @@ function createBrowseEmbedWithLinks(files, currentFolderId, userId) {
     if (folders.length > 0 || documents.length > 0) {
         embed.addFields(
             { name: '📊 Summary', value: `${folders.length} folders • ${documents.length} documents`, inline: true },
-            { name: '💡 How to use', value: 'Click the links above to open in Google Drive/Docs', inline: true }
+            { name: '💡 How to use', value: 'Click the links above to open directly', inline: true }
         );
+
+        // Add a note about truncation if needed
+        const totalShown = Math.min(5, folders.length) + Math.min(6, documents.length);
+        const totalItems = folders.length + documents.length;
+        if (totalItems > totalShown) {
+            embed.addFields({
+                name: '📋 Note',
+                value: `Showing ${totalShown} of ${totalItems} items. Use search to find specific documents.`,
+                inline: false
+            });
+        }
     }
 
     return embed;
@@ -269,20 +287,26 @@ function createSearchEmbedWithLinks(files, query) {
     const documents = files.filter(file => file.mimeType === 'application/vnd.google-apps.document');
 
     let description = '';
+    const maxDescriptionLength = 2000;
 
     if (documents.length > 0) {
         description += '📄 **Found Documents:**\n';
-        documents.slice(0, 15).forEach((doc, index) => {
-            const truncatedName = doc.name.length > 45 ? doc.name.substring(0, 42) + '...' : doc.name;
-            // Direct link to Google Docs
+        const documentsToShow = documents.slice(0, 10);
+        documentsToShow.forEach((doc, index) => {
+            const truncatedName = doc.name.length > 35 ? doc.name.substring(0, 32) + '...' : doc.name;
             description += `${index + 1}. 📝 [${truncatedName}](https://docs.google.com/document/d/${doc.id}/edit)\n`;
         });
 
-        if (documents.length > 15) {
-            description += `\n*Showing first 15 of ${documents.length} results*`;
+        if (documents.length > 10) {
+            description += `\n*Showing first 10 of ${documents.length} results*`;
         }
     } else {
-        description = `📭 No documents found matching "${query}"`;
+        description = `📭 No documents found matching "${query}"\n\nTry different keywords or check spelling.`;
+    }
+
+    // Ensure description doesn't exceed Discord limits
+    if (description.length > maxDescriptionLength) {
+        description = description.substring(0, maxDescriptionLength - 3) + '...';
     }
 
     embed.setDescription(description);
@@ -290,8 +314,16 @@ function createSearchEmbedWithLinks(files, query) {
     if (documents.length > 0) {
         embed.addFields(
             { name: '📊 Results', value: `${documents.length} documents found`, inline: true },
-            { name: '💡 How to use', value: 'Click the links above to open documents', inline: true }
+            { name: '💡 How to use', value: 'Click the links above to open directly', inline: true }
         );
+
+        if (documents.length > 10) {
+            embed.addFields({
+                name: '🔍 Tip',
+                value: 'Use more specific search terms to narrow down results.',
+                inline: false
+            });
+        }
     }
 
     return embed;
