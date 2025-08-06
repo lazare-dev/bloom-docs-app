@@ -207,13 +207,17 @@ client.on('interactionCreate', async interaction => {
         }
     } else if (interaction.isButton()) {
         const [type, id] = interaction.customId.split(':');
-        
+
         if (type === 'folder') {
             await handleBrowse(interaction, id);
         } else if (type === 'doc') {
             await handleDocument(interaction, id);
         } else if (type === 'back') {
             await handleBack(interaction);
+        } else if (type === 'pdf') {
+            await handlePdfDownload(interaction, id);
+        } else if (type === 'preview') {
+            await handlePreview(interaction, id);
         }
     }
 });
@@ -262,27 +266,44 @@ async function handleBrowse(interaction, folderId) {
 
 async function handleDocument(interaction, docId) {
     await interaction.deferReply();
-    
+
     try {
-        const markdown = await convertDocToMarkdown(docId);
-        const chunks = splitMessage(markdown);
-        
+        // Get document metadata
+        const doc = await docs.documents.get({ documentId: docId });
+        const title = doc.data.title || 'Untitled Document';
+
+        // Create web viewer URL (Google Docs public viewer)
+        const viewerUrl = `https://docs.google.com/document/d/${docId}/edit`;
+
         const embed = new EmbedBuilder()
-            .setTitle('📄 Document Content')
-            .setColor(0x34a853);
-        
-        // Send first chunk with embed
+            .setTitle(`📄 ${title}`)
+            .setDescription('Click the button below to view the full document')
+            .setColor(0x34a853)
+            .addFields(
+                { name: 'Document ID', value: docId, inline: true },
+                { name: 'View Options', value: 'Web viewer or download as PDF', inline: true }
+            );
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setLabel('📖 View Document')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(viewerUrl),
+                new ButtonBuilder()
+                    .setLabel('📥 Download PDF')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setCustomId(`pdf:${docId}`),
+                new ButtonBuilder()
+                    .setLabel('📝 Preview Text')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setCustomId(`preview:${docId}`)
+            );
+
         await interaction.editReply({
             embeds: [embed],
-            content: `\`\`\`markdown\n${chunks[0]}\n\`\`\``
+            components: [row]
         });
-        
-        // Send remaining chunks as follow-up messages
-        for (let i = 1; i < chunks.length; i++) {
-            await interaction.followUp({
-                content: `\`\`\`markdown\n${chunks[i]}\n\`\`\``
-            });
-        }
     } catch (error) {
         console.error('Error handling document:', error);
         await interaction.editReply('Error: Could not load document.');
@@ -303,6 +324,60 @@ async function handleBack(interaction) {
     const previousFolder = history.length > 0 ? history[history.length - 1] : process.env.GOOGLE_DRIVE_FOLDER_ID;
     
     await handleBrowse(interaction, previousFolder);
+}
+
+async function handlePdfDownload(interaction, docId) {
+    await interaction.deferReply();
+
+    try {
+        // Create PDF export URL
+        const pdfUrl = `https://docs.google.com/document/d/${docId}/export?format=pdf`;
+
+        const embed = new EmbedBuilder()
+            .setTitle('📥 PDF Download')
+            .setDescription('Click the link below to download the document as PDF')
+            .setColor(0xea4335);
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setLabel('📥 Download PDF')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(pdfUrl)
+            );
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [row]
+        });
+    } catch (error) {
+        console.error('Error creating PDF download:', error);
+        await interaction.editReply('Error: Could not create PDF download link.');
+    }
+}
+
+async function handlePreview(interaction, docId) {
+    await interaction.deferReply();
+
+    try {
+        const markdown = await convertDocToMarkdown(docId);
+
+        // Limit preview to first 1500 characters
+        const preview = markdown.length > 1500 ? markdown.substring(0, 1500) + '...' : markdown;
+
+        const embed = new EmbedBuilder()
+            .setTitle('📝 Document Preview')
+            .setDescription('Here\'s a preview of the document content:')
+            .setColor(0x34a853);
+
+        await interaction.editReply({
+            embeds: [embed],
+            content: `\`\`\`markdown\n${preview}\n\`\`\``
+        });
+    } catch (error) {
+        console.error('Error creating preview:', error);
+        await interaction.editReply('Error: Could not create document preview.');
+    }
 }
 
 async function handleSearch(interaction, query) {
