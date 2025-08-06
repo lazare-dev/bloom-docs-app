@@ -149,29 +149,24 @@ function createNavigationButtons(files, currentFolderId) {
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
     
-    // Register slash command
-    const command = new SlashCommandBuilder()
-        .setName('docs')
-        .setDescription('Browse Google Drive and view documents')
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('browse')
-                .setDescription('Browse Google Drive folders')
-        )
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('search')
-                .setDescription('Search for documents')
-                .addStringOption(option =>
-                    option.setName('query')
-                        .setDescription('Search term')
-                        .setRequired(true)
-                )
+    // Register slash commands
+    const browseCommand = new SlashCommandBuilder()
+        .setName('browse')
+        .setDescription('Browse Google Drive folders');
+
+    const searchCommand = new SlashCommandBuilder()
+        .setName('search')
+        .setDescription('Search for documents')
+        .addStringOption(option =>
+            option.setName('query')
+                .setDescription('Search term')
+                .setRequired(true)
         );
-    
+
     try {
-        await client.application.commands.create(command);
-        console.log('Slash command registered successfully!');
+        await client.application.commands.create(browseCommand);
+        await client.application.commands.create(searchCommand);
+        console.log('Slash commands registered successfully!');
     } catch (error) {
         console.error('Error registering slash command:', error);
     }
@@ -180,16 +175,12 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand()) {
         const { commandName } = interaction;
-        
-        if (commandName === 'docs') {
-            const subcommand = interaction.options.getSubcommand();
-            
-            if (subcommand === 'browse') {
-                await handleBrowse(interaction, process.env.GOOGLE_DRIVE_FOLDER_ID);
-            } else if (subcommand === 'search') {
-                const query = interaction.options.getString('query');
-                await handleSearch(interaction, query);
-            }
+
+        if (commandName === 'browse') {
+            await handleBrowse(interaction, process.env.GOOGLE_DRIVE_FOLDER_ID);
+        } else if (commandName === 'search') {
+            const query = interaction.options.getString('query');
+            await handleSearch(interaction, query);
         }
     } else if (interaction.isButton()) {
         const [type, id] = interaction.customId.split(':');
