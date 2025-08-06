@@ -183,8 +183,8 @@ function createBrowseEmbedWithLinks(files, currentFolderId, userId) {
     // Add folders section with clickable links
     if (folders.length > 0) {
         description += '📁 **Folders:**\n';
-        folders.slice(0, 10).forEach((folder, index) => {
-            const truncatedName = folder.name.length > 45 ? folder.name.substring(0, 42) + '...' : folder.name;
+        folders.slice(0, 6).forEach((folder, index) => {
+            const truncatedName = folder.name.length > 40 ? folder.name.substring(0, 37) + '...' : folder.name;
             // Create a custom link that will trigger folder browsing
             description += `${index + 1}. 📂 [${truncatedName}](https://drive.google.com/drive/folders/${folder.id})\n`;
         });
@@ -194,8 +194,8 @@ function createBrowseEmbedWithLinks(files, currentFolderId, userId) {
     // Add documents section with direct Google Docs links
     if (documents.length > 0) {
         description += '📄 **Documents:**\n';
-        documents.slice(0, 10).forEach((doc, index) => {
-            const truncatedName = doc.name.length > 45 ? doc.name.substring(0, 42) + '...' : doc.name;
+        documents.slice(0, 8).forEach((doc, index) => {
+            const truncatedName = doc.name.length > 40 ? doc.name.substring(0, 37) + '...' : doc.name;
             // Direct link to Google Docs
             description += `${index + 1}. 📝 [${truncatedName}](https://docs.google.com/document/d/${doc.id}/edit)\n`;
         });
@@ -368,7 +368,7 @@ client.once('ready', async () => {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('browse')
-                .setDescription('Browse Google Drive folders (private)')
+                .setDescription('Browse Google Drive folders (private by default)')
                 .addBooleanOption(option =>
                     option.setName('share')
                         .setDescription('Share with everyone in the channel (default: private)')
@@ -378,7 +378,7 @@ client.once('ready', async () => {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('search')
-                .setDescription('Search for documents (private)')
+                .setDescription('Search for documents (private by default)')
                 .addStringOption(option =>
                     option.setName('query')
                         .setDescription('Search term')
@@ -389,6 +389,11 @@ client.once('ready', async () => {
                         .setDescription('Share with everyone in the channel (default: private)')
                         .setRequired(false)
                 )
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('help')
+                .setDescription('Show help and usage examples')
         );
 
     try {
@@ -412,6 +417,8 @@ client.on('interactionCreate', async interaction => {
             } else if (subcommand === 'search') {
                 const query = interaction.options.getString('query');
                 await handleSearch(interaction, query, share);
+            } else if (subcommand === 'help') {
+                await handleHelp(interaction);
             }
         }
     } else if (interaction.isButton()) {
@@ -527,6 +534,41 @@ async function handleBack(interaction) {
     const previousFolder = history.length > 0 ? history[history.length - 1] : process.env.GOOGLE_DRIVE_FOLDER_ID;
 
     await handleBrowse(interaction, previousFolder, false);
+}
+
+async function handleHelp(interaction) {
+    await interaction.reply({
+        ephemeral: true,
+        embeds: [
+            new EmbedBuilder()
+                .setTitle('📚 Google Docs Bot Help')
+                .setDescription('Here are all the available commands and options:')
+                .setColor(0x34a853)
+                .addFields(
+                    {
+                        name: '🔒 Private Commands (Only you can see)',
+                        value: '`/docs browse` - Browse folders privately\n`/docs search query: your search` - Search documents privately',
+                        inline: false
+                    },
+                    {
+                        name: '📢 Shared Commands (Everyone can see)',
+                        value: '`/docs browse share: true` - Browse folders publicly\n`/docs search query: your search share: true` - Search documents publicly',
+                        inline: false
+                    },
+                    {
+                        name: '💡 How it works',
+                        value: '• **Private by default** - responses only visible to you\n• **Add `share: true`** to make responses visible to everyone\n• **Click links** to open documents in Google Drive/Docs\n• **No buttons needed** - direct links work better!',
+                        inline: false
+                    },
+                    {
+                        name: '🔍 Search Examples',
+                        value: '`/docs search query: meeting notes`\n`/docs search query: project plan share: true`\n`/docs search query: design document`',
+                        inline: false
+                    }
+                )
+                .setFooter({ text: 'Tip: Use /docs help anytime to see this help message!' })
+        ]
+    });
 }
 
 async function handlePdfDownload(interaction, docId) {
